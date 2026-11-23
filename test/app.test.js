@@ -68,7 +68,7 @@ class Peramban {
 
   async daftar(isi) {
     return this.kirim('/daftar', '/daftar', {
-      nim: 'A1234567',
+      nim: '26000001',
       nama: 'Rani Uji',
       sandi: 'kata-sandi-uji-1',
       sandi2: 'kata-sandi-uji-1',
@@ -160,7 +160,7 @@ test('POST tanpa token CSRF ditolak', async () => {
     await b.minta('/daftar'); // mendapat cookie csrf
     const res = await b.minta('/daftar', {
       method: 'POST',
-      form: { nim: 'A1234567', nama: 'Rani', sandi: 'kata-sandi-uji-1', sandi2: 'kata-sandi-uji-1', kode: 'UJI12345' },
+      form: { nim: '26000001', nama: 'Rani', sandi: 'kata-sandi-uji-1', sandi2: 'kata-sandi-uji-1', kode: 'UJI12345' },
     });
     assert.equal(res.status, 403);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pengguna').get().n, 0);
@@ -171,7 +171,7 @@ test('POST dengan token CSRF yang salah ditolak', async () => {
   await denganServer(async ({ base }) => {
     const b = new Peramban(base);
     await b.minta('/daftar');
-    const res = await b.minta('/daftar', { method: 'POST', form: { _csrf: 'token-palsu', nim: 'A1234567' } });
+    const res = await b.minta('/daftar', { method: 'POST', form: { _csrf: 'token-palsu', nim: '26000001' } });
     assert.equal(res.status, 403);
   });
 });
@@ -195,7 +195,7 @@ test('kode kelas salah tidak menyembunyikan kesalahan input lain', async () => {
     assert.equal(res.status, 403);
     const teks = await res.text();
     assert.match(teks, /Perbaiki 3 hal berikut/);
-    assert.match(teks, /NIM harus berupa huruf dan angka/);
+    assert.match(teks, /NIM harus berupa 8 angka/);
     assert.match(teks, /Kata sandi minimal 8 karakter/);
     assert.match(teks, /Kode kelas tidak cocok/);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pengguna').get().n, 0);
@@ -205,7 +205,7 @@ test('kode kelas salah tidak menyembunyikan kesalahan input lain', async () => {
 test('NIM yang sudah terdaftar tidak terungkap bila kode kelas salah', async () => {
   await denganServer(async ({ base }) => {
     await new Peramban(base).daftar();
-    const res = await new Peramban(base).daftar({ kode: 'SALAH999', nim: 'A1234567', nama: 'Penyusup' });
+    const res = await new Peramban(base).daftar({ kode: 'SALAH999', nim: '26000001', nama: 'Penyusup' });
     assert.equal(res.status, 403);
     assert.doesNotMatch(await res.text(), /sudah terdaftar/);
   });
@@ -218,6 +218,35 @@ test('kode kelas tidak peka huruf besar/kecil', async () => {
   });
 });
 
+test('NIM harus tepat 8 angka: format lain ditolak, 26000000 dan 26000001 diterima', async () => {
+  await denganServer(async ({ base, db }) => {
+    const ditolak = ['2600000', '260000001', '2600000A', 'A2600000', '2600 0000', '26-00000', ''];
+    for (const nim of ditolak) {
+      const res = await new Peramban(base).daftar({ nim });
+      assert.equal(res.status, 400, `NIM "${nim}" seharusnya ditolak`);
+      assert.match(await res.text(), /NIM harus berupa 8 angka, contoh 26000000/);
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pengguna').get().n, 0);
+
+    for (const nim of ['26000000', '26000001']) {
+      const res = await new Peramban(base).daftar({ nim, nama: `Mahasiswa ${nim}` });
+      assert.equal(res.status, 303, `NIM ${nim} seharusnya diterima`);
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pengguna').get().n, 2);
+  });
+});
+
+test('formulir NIM memakai papan angka di ponsel dan batas 8 karakter', async () => {
+  await denganServer(async ({ base }) => {
+    for (const jalur of ['/masuk', '/daftar']) {
+      const teks = await (await new Peramban(base).minta(jalur)).text();
+      const kolomNim = /<input id="nim"[^>]*>/.exec(teks)?.[0] ?? '';
+      assert.match(kolomNim, /inputmode="numeric"/, jalur);
+      assert.match(kolomNim, /maxlength="8"/, jalur);
+    }
+  });
+});
+
 test('akun pertama menjadi Admin, akun berikutnya Anggota', async () => {
   await denganServer(async ({ base, db }) => {
     const satu = new Peramban(base);
@@ -226,12 +255,12 @@ test('akun pertama menjadi Admin, akun berikutnya Anggota', async () => {
     assert.equal(res.headers.get('location'), '/');
 
     const dua = new Peramban(base);
-    await dua.daftar({ nim: 'B7654321', nama: 'Dewi Uji' });
+    await dua.daftar({ nim: '26000002', nama: 'Dewi Uji' });
 
     const peran = db.prepare('SELECT nim, peran FROM pengguna ORDER BY id').all();
     assert.deepEqual(
       peran.map((p) => [p.nim, p.peran]),
-      [['A1234567', 'admin'], ['B7654321', 'anggota']],
+      [['26000001', 'admin'], ['26000002', 'anggota']],
     );
   });
 });
@@ -241,7 +270,7 @@ test('semua kesalahan input ditampilkan sekaligus, bukan satu per satu', async (
     const res = await new Peramban(base).daftar({ nim: 'a b', nama: 'X', sandi: 'pendek', sandi2: 'beda' });
     assert.equal(res.status, 400);
     const teks = await res.text();
-    assert.match(teks, /NIM harus berupa huruf dan angka/);
+    assert.match(teks, /NIM harus berupa 8 angka/);
     assert.match(teks, /Nama lengkap harus 2 sampai 80 karakter/);
     assert.match(teks, /Kata sandi minimal 8 karakter/);
     assert.match(teks, /tidak sama/);
@@ -249,10 +278,10 @@ test('semua kesalahan input ditampilkan sekaligus, bukan satu per satu', async (
   });
 });
 
-test('NIM yang sama tidak bisa didaftarkan dua kali (huruf besar/kecil dianggap sama)', async () => {
+test('NIM yang sama tidak bisa didaftarkan dua kali', async () => {
   await denganServer(async ({ base, db }) => {
     await new Peramban(base).daftar();
-    const res = await new Peramban(base).daftar({ nim: 'a1234567', nama: 'Orang Lain' });
+    const res = await new Peramban(base).daftar({ nim: '26000001', nama: 'Orang Lain' });
     assert.equal(res.status, 409);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pengguna').get().n, 1);
   });
@@ -300,7 +329,7 @@ test('masuk dengan kata sandi benar berhasil', async () => {
   await denganServer(async ({ base }) => {
     await new Peramban(base).daftar();
     const b = new Peramban(base);
-    const res = await b.kirim('/masuk', '/masuk', { nim: 'a1234567', sandi: 'kata-sandi-uji-1' });
+    const res = await b.kirim('/masuk', '/masuk', { nim: '26000001', sandi: 'kata-sandi-uji-1' });
     assert.equal(res.status, 303);
     assert.equal((await b.minta('/')).status, 200);
   });
@@ -309,8 +338,8 @@ test('masuk dengan kata sandi benar berhasil', async () => {
 test('pesan gagal masuk sama untuk NIM yang tidak ada dan kata sandi yang salah', async () => {
   await denganServer(async ({ base }) => {
     await new Peramban(base).daftar();
-    const salahSandi = await new Peramban(base).kirim('/masuk', '/masuk', { nim: 'A1234567', sandi: 'salah-salah-salah' });
-    const salahNim = await new Peramban(base).kirim('/masuk', '/masuk', { nim: 'Z9999999', sandi: 'salah-salah-salah' });
+    const salahSandi = await new Peramban(base).kirim('/masuk', '/masuk', { nim: '26000001', sandi: 'salah-salah-salah' });
+    const salahNim = await new Peramban(base).kirim('/masuk', '/masuk', { nim: '26999999', sandi: 'salah-salah-salah' });
     assert.equal(salahSandi.status, 401);
     assert.equal(salahNim.status, 401);
     const a = (await salahSandi.text()).match(/NIM atau kata sandi tidak cocok[^<]*/)?.[0];
@@ -325,11 +354,11 @@ test('lima kegagalan beruntun mengunci percobaan berikutnya', async () => {
     await new Peramban(base).daftar();
     const b = new Peramban(base);
     for (let i = 0; i < 5; i += 1) {
-      const res = await b.kirim('/masuk', '/masuk', { nim: 'A1234567', sandi: 'salah-salah-salah' });
+      const res = await b.kirim('/masuk', '/masuk', { nim: '26000001', sandi: 'salah-salah-salah' });
       assert.equal(res.status, 401, `percobaan ${i + 1}`);
     }
     // Kata sandi yang benar pun ditolak selama terkunci.
-    const terkunci = await b.kirim('/masuk', '/masuk', { nim: 'A1234567', sandi: 'kata-sandi-uji-1' });
+    const terkunci = await b.kirim('/masuk', '/masuk', { nim: '26000001', sandi: 'kata-sandi-uji-1' });
     assert.equal(terkunci.status, 429);
     assert.match(await terkunci.text(), /Terlalu banyak percobaan/);
   });
@@ -371,12 +400,12 @@ test('Anggota biasa tidak bisa membuka atau memakai halaman Admin', async () => 
   await denganServer(async ({ base, db }) => {
     await new Peramban(base).daftar();
     const anggota = new Peramban(base);
-    await anggota.daftar({ nim: 'B7654321', nama: 'Dewi Uji' });
+    await anggota.daftar({ nim: '26000002', nama: 'Dewi Uji' });
 
     assert.equal((await anggota.minta('/admin/pengguna')).status, 403);
 
-    const idAdmin = db.prepare("SELECT id FROM pengguna WHERE nim = 'A1234567'").get().id;
-    const idAnggota = db.prepare("SELECT id FROM pengguna WHERE nim = 'B7654321'").get().id;
+    const idAdmin = db.prepare("SELECT id FROM pengguna WHERE nim = '26000001'").get().id;
+    const idAnggota = db.prepare("SELECT id FROM pengguna WHERE nim = '26000002'").get().id;
     const res = await anggota.kirim('/', `/admin/pengguna/${idAnggota}/peran`, { peran: 'admin' });
     assert.equal(res.status, 403);
     assert.equal(db.prepare('SELECT peran FROM pengguna WHERE id = ?').get(idAnggota).peran, 'anggota');
@@ -388,20 +417,20 @@ test('Admin bisa mengubah peran, dan tidak bisa menurunkan Admin terakhir', asyn
   await denganServer(async ({ base, db }) => {
     const admin = new Peramban(base);
     await admin.daftar();
-    await new Peramban(base).daftar({ nim: 'B7654321', nama: 'Dewi Uji' });
+    await new Peramban(base).daftar({ nim: '26000002', nama: 'Dewi Uji' });
 
     const id = (nim) => db.prepare('SELECT id FROM pengguna WHERE nim = ?').get(nim).id;
 
-    const ok = await admin.kirim('/admin/pengguna', `/admin/pengguna/${id('B7654321')}/peran`, { peran: 'ketua' });
+    const ok = await admin.kirim('/admin/pengguna', `/admin/pengguna/${id('26000002')}/peran`, { peran: 'ketua' });
     assert.equal(ok.status, 200);
     assert.match(await ok.text(), /Dewi Uji sekarang Ketua Kelas/);
-    assert.equal(db.prepare("SELECT peran FROM pengguna WHERE nim = 'B7654321'").get().peran, 'ketua');
+    assert.equal(db.prepare("SELECT peran FROM pengguna WHERE nim = '26000002'").get().peran, 'ketua');
 
-    const tolak = await admin.kirim('/admin/pengguna', `/admin/pengguna/${id('A1234567')}/peran`, { peran: 'anggota' });
+    const tolak = await admin.kirim('/admin/pengguna', `/admin/pengguna/${id('26000001')}/peran`, { peran: 'anggota' });
     assert.equal(tolak.status, 409);
-    assert.equal(db.prepare("SELECT peran FROM pengguna WHERE nim = 'A1234567'").get().peran, 'admin');
+    assert.equal(db.prepare("SELECT peran FROM pengguna WHERE nim = '26000001'").get().peran, 'admin');
 
-    const asing = await admin.kirim('/admin/pengguna', `/admin/pengguna/${id('B7654321')}/peran`, { peran: 'presiden' });
+    const asing = await admin.kirim('/admin/pengguna', `/admin/pengguna/${id('26000002')}/peran`, { peran: 'presiden' });
     assert.equal(asing.status, 400);
   });
 });
@@ -411,10 +440,10 @@ test('peran baru langsung berlaku tanpa perlu masuk ulang', async () => {
     const admin = new Peramban(base);
     await admin.daftar();
     const dewi = new Peramban(base);
-    await dewi.daftar({ nim: 'B7654321', nama: 'Dewi Uji' });
+    await dewi.daftar({ nim: '26000002', nama: 'Dewi Uji' });
     assert.equal((await dewi.minta('/admin/pengguna')).status, 403);
 
-    const idDewi = db.prepare("SELECT id FROM pengguna WHERE nim = 'B7654321'").get().id;
+    const idDewi = db.prepare("SELECT id FROM pengguna WHERE nim = '26000002'").get().id;
     await admin.kirim('/admin/pengguna', `/admin/pengguna/${idDewi}/peran`, { peran: 'admin' });
     assert.equal((await dewi.minta('/admin/pengguna')).status, 200);
   });
@@ -430,9 +459,9 @@ test('Admin bisa mengganti kode kelas; kode lama tidak berlaku lagi', async () =
     assert.notEqual(baru, 'UJI12345');
     assert.match(baru, /^[A-Z2-9]{8}$/);
 
-    const lama = await new Peramban(base).daftar({ nim: 'C1111111', nama: 'Tamu', kode: 'UJI12345' });
+    const lama = await new Peramban(base).daftar({ nim: '26000003', nama: 'Tamu', kode: 'UJI12345' });
     assert.equal(lama.status, 403);
-    const benar = await new Peramban(base).daftar({ nim: 'C1111111', nama: 'Tamu', kode: baru });
+    const benar = await new Peramban(base).daftar({ nim: '26000003', nama: 'Tamu', kode: baru });
     assert.equal(benar.status, 303);
   });
 });
@@ -442,7 +471,7 @@ test('menu Pengguna hanya tampil untuk Admin', async () => {
     const admin = new Peramban(base);
     await admin.daftar();
     const anggota = new Peramban(base);
-    await anggota.daftar({ nim: 'B7654321', nama: 'Dewi Uji' });
+    await anggota.daftar({ nim: '26000002', nama: 'Dewi Uji' });
     assert.match(await (await admin.minta('/')).text(), /href="\/admin\/pengguna"/);
     assert.doesNotMatch(await (await anggota.minta('/')).text(), /href="\/admin\/pengguna"/);
   });

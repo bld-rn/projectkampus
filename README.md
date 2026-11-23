@@ -42,6 +42,12 @@ Daftar peran dan izin ada di satu berkas: `src/roles.js`.
 
 Peran lain: Bendahara dan Anggota. Peran diatur Admin di halaman **Pengguna**.
 
+## Aturan pendaftaran
+
+- **NIM:** 8 angka, contoh `26000000`. Awalan angkatan tidak dipaksa, jadi angkatan lain tetap bisa mendaftar. Bila ada NIM dengan panjang berbeda (misalnya mahasiswa pindahan), ubah `NIM_PANJANG` di `src/routes/auth.js`.
+- **Kata sandi:** 8 sampai 128 karakter.
+- **Kode kelas:** wajib, dibagikan Admin ke teman sekelas.
+
 ## Keamanan
 
 - Kata sandi disimpan sebagai hash scrypt, tidak pernah sebagai teks asli.
@@ -78,7 +84,6 @@ npm test
 
 ## Yang belum diputuskan
 
-- **Format NIM:** sementara huruf/angka 5 sampai 20 karakter. Sesuaikan di `src/routes/auth.js` bila format NIM kampus berbeda.
 - **Hosting:** database SQLite butuh penyimpanan yang tetap (persistent volume). Tanpa itu, data hilang tiap situs dipasang ulang.
 
 ## Lisensi font

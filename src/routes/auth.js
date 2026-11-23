@@ -14,8 +14,10 @@ import { bidangCsrf, html, kirim, kolom, kotakPesan } from '../views.js';
 // Hash palsu: dipakai agar waktu respons sama, baik NIM-nya ada maupun tidak.
 const SANDI_PALSU = await hashSandi('pembanding-waktu-respons');
 
-// Aturan input. NIM diasumsikan huruf/angka 5-20 karakter (belum dikonfirmasi ke format NIM kampus).
-const POLA_NIM = /^[A-Za-z0-9]{5,20}$/;
+// Aturan input. NIM berupa 8 angka (contoh 26000000). Awalan angkatan sengaja tidak dipaksa
+// supaya angkatan lain tetap bisa mendaftar. Bila ada NIM dengan panjang berbeda, ubah di sini.
+const NIM_PANJANG = 8;
+const POLA_NIM = new RegExp(`^[0-9]{${NIM_PANJANG}}$`);
 const SANDI_MIN = 8;
 const SANDI_MAKS = 128;
 
@@ -66,7 +68,7 @@ export function buatAuthRouter({ db, config }) {
             id: 'nim',
             label: 'NIM',
             nilai: nim,
-            atribut: { autocomplete: 'username', required: true, maxlength: 20, autocapitalize: 'off' },
+            atribut: { autocomplete: 'username', required: true, maxlength: NIM_PANJANG, inputmode: 'numeric' },
           })}
           ${kolom({
             id: 'sandi',
@@ -148,8 +150,8 @@ export function buatAuthRouter({ db, config }) {
             id: 'nim',
             label: 'NIM',
             nilai: nim,
-            bantuan: 'Huruf dan angka saja, 5 sampai 20 karakter. NIM menjadi nama pengguna untuk masuk.',
-            atribut: { autocomplete: 'username', required: true, maxlength: 20, autocapitalize: 'off' },
+            bantuan: `${NIM_PANJANG} angka, contoh 26000000. NIM menjadi nama pengguna untuk masuk.`,
+            atribut: { autocomplete: 'username', required: true, maxlength: NIM_PANJANG, inputmode: 'numeric' },
           })}
           ${kolom({
             id: 'nama',
@@ -210,7 +212,7 @@ export function buatAuthRouter({ db, config }) {
     const kodeCocok = Boolean(kodeBenar) && samaAman(kode, kodeBenar);
 
     const galat = [];
-    if (!POLA_NIM.test(nim)) galat.push('NIM harus berupa huruf dan angka saja, 5 sampai 20 karakter.');
+    if (!POLA_NIM.test(nim)) galat.push(`NIM harus berupa ${NIM_PANJANG} angka, contoh 26000000.`);
     if (nama.length < 2 || nama.length > 80) galat.push('Nama lengkap harus 2 sampai 80 karakter.');
     if (sandi.length < SANDI_MIN) galat.push(`Kata sandi minimal ${SANDI_MIN} karakter.`);
     if (sandi.length > SANDI_MAKS) galat.push(`Kata sandi maksimal ${SANDI_MAKS} karakter.`);
